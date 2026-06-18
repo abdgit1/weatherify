@@ -322,8 +322,6 @@ function firstload() {
 }
 firstload(); 
 
-const API_KEY= '8d2a0f2d7c464673b8964634261506';
-
 
 async function testconnection(city) {
         
