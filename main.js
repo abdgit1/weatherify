@@ -151,6 +151,50 @@ function updateGreeting(localtime) {
     }
 }
 
+function showSkeletons() {
+    // 1. Current Weather Skeletons
+    document.getElementById('temp').innerHTML = '<div class="skeleton h-12 w-28 rounded-xl my-1"></div>';
+    document.getElementById('condition').innerHTML = '<div class="skeleton h-6 w-36 rounded-md my-1.5"></div>';
+    document.getElementById('feelslike').innerHTML = '<div class="skeleton h-4 w-24 rounded-md my-1"></div>';
+    document.getElementById('location').innerHTML = '<div class="skeleton h-4 w-40 rounded-md"></div>';
+    document.getElementById('weather-icon').innerHTML = '<div class="skeleton skeleton-circle absolute inset-0 w-full h-full"></div>';
+
+    // 2. Stats Skeletons
+    const statSkeleton = '<div class="skeleton h-4 w-12 rounded-sm mt-1"></div>';
+    document.getElementById('humidity').innerHTML = '<div class="skeleton h-4 w-8 rounded-sm mt-1"></div>';
+    document.getElementById('wind').innerHTML = statSkeleton;
+    document.getElementById('sunrise').innerHTML = statSkeleton;
+    document.getElementById('sunset').innerHTML = statSkeleton;
+
+    // 2.5 Current Time Skeleton
+    document.getElementById('current-time').innerHTML = '<div class="skeleton h-3 w-24 rounded-full"></div>';
+
+    // 3. Forecast Skeletons
+    if (forecastContainer) {
+        forecastContainer.innerHTML = '';
+        for (let i = 0; i < 5; i++) {
+            const row = document.createElement('div');
+            row.className = 'fc-skeleton-row';
+            row.innerHTML = `
+                <div class="skeleton skeleton-circle w-9 h-9 shrink-0"></div>
+                <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <div class="skeleton skeleton-sm w-20"></div>
+                    <div class="skeleton skeleton-sm w-16 opacity-60"></div>
+                </div>
+                <div class="flex gap-1.5">
+                    <div class="skeleton skeleton-sm w-6"></div>
+                    <div class="skeleton skeleton-sm w-6 opacity-40"></div>
+                </div>
+            `;
+            forecastContainer.appendChild(row);
+        }
+    }
+
+    // 4. Chart Skeleton (hides canvas to show shimmer behind it)
+    const chartCanvas = document.getElementById('hourly-chart');
+    if (chartCanvas) chartCanvas.style.opacity = '0';
+}
+
 updateGreeting();
 
 mylocationButton.addEventListener('click', () => {
@@ -217,7 +261,9 @@ let hourlyChart = null; // Variable to store the chart instance
 let currentHoursData = null; // Store hours data globally to redraw on theme switch
 
 function initChart(hours) {
-    const ctx = document.getElementById('hourly-chart').getContext('2d');
+    const canvas = document.getElementById('hourly-chart');
+    const ctx = canvas.getContext('2d');
+    canvas.style.opacity = '1';
 
     // Destroy existing chart if it exists
     if (hourlyChart) {
@@ -329,6 +375,8 @@ async function testconnection(city) {
             console.error('City name is required to fetch weather data.');
             return;
         }
+
+        showSkeletons();
 
             try {
                 const response = await fetch(`https://api.weatherapi.com/v1/forecast.json?key=${API_KEY}&q=${city}&days=5&aqi=yes&alerts=no` );
