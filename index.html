@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weatherify | Weather Dashboard</title>
+    <meta name="description"
+        content="Atmosphere — a beautiful real-time weather dashboard with hourly forecasts, 5-day outlooks, and saved cities.">
+
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="style.css">
+
+    <!-- ── Theme initialiser: runs before paint to prevent flash ── -->
+    <script>
+        (function () {
+            const saved = localStorage.getItem('theme');
+            const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (saved === 'dark' || (saved === null && systemPrefersDark)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
+
+    <style>
+        /* ═══════════════════════════════════════════════════════════
+           DESIGN TOKENS — light & dark  (kept inline for FOUC safety)
+           ═══════════════════════════════════════════════════════════ */
+        :root {
+            /* Backgrounds */
+            --bg-primary: #c9e4f5;
+            --bg-secondary: #9ecde9;
+            --bg-card: rgba(255, 255, 255, 0.80);
+            --bg-card-solid: #f0f8ff;
+            --bg-input: rgba(255, 255, 255, 0.97);
+            --bg-stat: rgba(2, 132, 199, 0.07);
+            --bg-hover: rgba(2, 132, 199, 0.14);
+
+            /* Typography */
+            --text-primary: #07202f;
+            --text-secondary: #14405e;
+            --text-muted: #3d6578;
+
+            /* Borders */
+            --border: rgba(2, 132, 199, 0.18);
+            --border-strong: rgba(2, 132, 199, 0.32);
+
+            /* Accent */
+            --accent: #0284c7;
+            --accent-soft: #38bdf8;
+            --accent-glow: rgba(2, 132, 199, 0.22);
+
+            /* Shadows */
+            --shadow: 0 4px 28px -4px rgba(2, 132, 199, 0.18), 0 1px 4px rgba(0, 0, 0, 0.04);
+            --shadow-hover: 0 10px 40px -6px rgba(2, 132, 199, 0.28);
+            --shadow-glow: 0 0 36px -8px rgba(2, 132, 199, 0.38);
+
+            /* Text Gradients */
+            --gradient-from: #0369a1;
+            --gradient-via: #1d4ed8;
+            --gradient-to: #6d28d9;
+
+            /* Misc */
+            --section-label: rgba(2, 132, 199, 0.10);
+            --skeleton-base: rgba(2, 132, 199, 0.07);
+            --skeleton-shine: rgba(255, 255, 255, 0.62);
+        }
+
+        .dark {
+            --bg-primary: #040d1a;
+            --bg-secondary: #0b1527;
+            --bg-card: rgba(13, 22, 42, 0.65);
+            --bg-card-solid: rgba(8, 16, 34, 0.96);
+            --bg-input: rgba(22, 34, 56, 0.70);
+            --bg-stat: rgba(255, 255, 255, 0.055);
+            --bg-hover: rgba(255, 255, 255, 0.10);
+
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-muted: #94a3b8;
+
+            --border: rgba(255, 255, 255, 0.07);
+            --border-strong: rgba(255, 255, 255, 0.13);
+
+            --accent: #38bdf8;
+            --accent-soft: #818cf8;
+            --accent-glow: rgba(56, 189, 248, 0.25);
+
+            --shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.40);
+            --shadow-hover: 0 8px 40px -6px rgba(0, 0, 0, 0.55);
+            --shadow-glow: 0 0 40px -10px var(--accent-glow);
+
+            /* Text Gradients */
+            --gradient-from: #38bdf8;
+            --gradient-via: #818cf8;
+            --gradient-to: #c084fc;
+
+            --section-label: rgba(56, 189, 248, 0.10);
+            --skeleton-base: rgba(255, 255, 255, 0.05);
+            --skeleton-shine: rgba(255, 255, 255, 0.13);
+        }
+
+        /* ── Global ─────────────────────────────────────────────── */
+        * {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        /* ── Background canvas ──────────────────────────────────── */
+        .bg-effects {
+            position: fixed;
+            inset: 0;
+            z-index: -2;
+            overflow: hidden;
+            pointer-events: none;
+            background: linear-gradient(148deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            animation: float 22s infinite ease-in-out;
+        }
+
+        /* Light orbs — vibrant to counteract the pale bg */
+        .orb-1 {
+            width: 620px;
+            height: 620px;
+            background: rgba(2, 132, 199, 0.35);
+            top: -200px;
+            right: -100px;
+            opacity: 0.78;
+        }
+
+        .orb-2 {
+            width: 520px;
+            height: 520px;
+            background: rgba(139, 92, 246, 0.25);
+            bottom: -150px;
+            left: -140px;
+            opacity: 0.68;
+            animation-delay: -8s;
+        }
+
+        .orb-3 {
+            width: 390px;
+            height: 390px;
+            background: rgba(236, 72, 153, 0.18);
+            top: 45%;
+            left: 42%;
+            opacity: 0.52;
+            animation-delay: -15s;
+        }
+
+        /* Dark overrides */
+        .dark .orb-1 {
+            background: rgba(56, 189, 248, 0.18);
+            opacity: 0.45;
+        }
+
+        .dark .orb-2 {
+            background: rgba(139, 92, 246, 0.18);
+            opacity: 0.45;
+        }
+
+        .dark .orb-3 {
+            background: rgba(236, 72, 153, 0.12);
+            opacity: 0.40;
+        }
+
+        .noise-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            opacity: 0.022;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(36px, -36px) scale(1.08);
+            }
+
+            66% {
+                transform: translate(-28px, 28px) scale(0.94);
+            }
+        }
+
+        /* ── Glass card ─────────────────────────────────────────── */
+        .glass-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            transition: box-shadow 0.3s ease, transform 0.3s ease, background 0.3s ease;
+        }
+
+        .glass-card:hover {
+            box-shadow: var(--shadow-hover), var(--shadow-glow);
+        }
+
+        /* ── Scrollbar ──────────────────────────────────────────── */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-strong) transparent;
+            scroll-behavior: smooth;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: var(--border-strong);
+            border-radius: 8px;
+            border: 1px solid transparent;
+            background-clip: padding-box;
+            transition: background-color 0.25s ease;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background-color: var(--accent);
+        }
+
+        /* ── Entrance animations ────────────────────────────────── */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(22px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+        }
+
+        .delay-1 {
+            animation-delay: 0.08s;
+        }
+
+        .delay-2 {
+            animation-delay: 0.16s;
+        }
+
+        .delay-3 {
+            animation-delay: 0.24s;
+        }
+
+        .delay-4 {
+            animation-delay: 0.32s;
+        }
+
+        .delay-5 {
+            animation-delay: 0.40s;
+        }
+
+        .delay-6 {
+            animation-delay: 0.48s;
+        }
+
+        /* ── Gradient text ──────────────────────────────────────── */
+        .gradient-text {
+            background: linear-gradient(130deg, var(--gradient-from) 0%, var(--gradient-via) 55%, var(--gradient-to) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* ── Section label pill ─────────────────────────────────── */
+    </style>
+</head>
+
+<body id="body"
+    class="text-[var(--text-primary)] min-h-screen antialiased selection:bg-[var(--accent)] selection:text-white transition-colors duration-300">
+
+    <!-- ── Background effects ─────────────────────────────────── -->
+    <div class="bg-effects">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+    <div class="noise-overlay"></div>
+
+    <main id="app-container" class="max-w-7xl mx-auto w-full min-h-screen flex flex-col gap-5 p-4 sm:p-5 md:p-6 lg:p-8">
+
+        <!-- ══ HEADER ═══════════════════════════════════════════════════════ -->
+        <header id="control-panel"
+            class="glass-card rounded-2xl px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in shrink-0 relative overflow-hidden">
+
+            <!-- Accent top line -->
+            <div
+                class="absolute top-0 left-8 right-8 h-[1.5px] bg-gradient-to-r from-transparent via-[var(--accent)] to-transparent opacity-60 rounded-full pointer-events-none">
+            </div>
+
+            <!-- Brand -->
+            <div class="flex items-center gap-3 shrink-0">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--accent)] to-[var(--accent-soft)] flex items-center justify-center text-white shadow-lg shadow-[var(--accent-glow)]">
+                    <i class="fa-solid fa-cloud-sun text-[1rem]"></i>
+                </div>
+                <div>
+                    <h1 class="text-[1.05rem] font-extrabold tracking-tight text-[var(--text-primary)] leading-none">
+                        Weatherify</h1>
+                    <p class="text-[0.6rem] uppercase tracking-[0.2em] text-[var(--text-muted)] mt-0.5">Weather
+                        Dashboard</p>
+                </div>
+            </div>
+
+            <!-- Controls row -->
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+
+                <!-- Search input -->
+                <div class="relative flex-grow sm:flex-grow-0">
+                    <i
+                        class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-xs pointer-events-none"></i>
+                    <input type="text" placeholder="Search city…" id="city-input"
+                        class="w-full sm:w-60 md:w-72 bg-[var(--bg-input)] pl-9 pr-11 py-2.5 rounded-full border border-[var(--border)] text-[var(--text-primary)] placeholder-[var(--text-muted)] text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] transition-all">
+                    <!-- Search submit button -->
+                    <button id="search-btn" aria-label="Search"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full bg-[var(--accent)] text-white text-xs hover:opacity-90 active:scale-95 transition-all shadow-sm">
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+
+                <!-- My Location -->
+                <button id="location-btn"
+                    class="w-10 h-10 sm:w-auto sm:px-4 sm:py-2.5 flex items-center justify-center sm:gap-2 bg-[var(--bg-stat)] hover:bg-[var(--bg-hover)] rounded-full border border-[var(--border)] hover:border-[var(--accent)] text-[var(--text-secondary)] transition-all shrink-0 cursor-pointer"
+                    title="Locate Me">
+                    <i class="fa-solid fa-location-crosshairs text-[var(--accent)] text-sm"></i>
+                    <span class="hidden sm:inline font-semibold text-xs">Locate Me</span>
+                </button>
+
+                <!-- Theme toggle -->
+                <button id="theme-toggle" aria-label="Toggle theme"
+                    class="w-10 h-10 flex items-center justify-center bg-[var(--bg-stat)] hover:bg-[var(--bg-hover)] rounded-full border border-[var(--border)] hover:border-[var(--accent)] transition-all shrink-0 cursor-pointer">
+                    <span id="theme-icon" class="flex items-center justify-center leading-none">
+                        <!-- Filled by JS -->
+                    </span>
+                </button>
+            </div>
+        </header>
+
+        <!-- ══ GREETING ══════════════════════════════════════════════════════ -->
+        <section id="greeting-section" class="animate-in delay-1 shrink-0 px-1">
+
+            <!-- Local-time badge -->
+            <div
+                class="inline-flex items-center gap-2 bg-[var(--bg-stat)] border border-[var(--border)] rounded-full px-3.5 py-1.5 mb-3">
+                <i class="fa-regular fa-clock text-[var(--accent)] text-xs"></i>
+                <p id="current-time" class="text-[var(--text-muted)] text-[0.7rem] font-semibold tracking-wide">Syncing
+                    time…</p>
+            </div>
+
+            <h2 id="greeting-message"
+                class="text-3xl sm:text-4xl md:text-[3.2rem] font-black tracking-tight gradient-text leading-tight mb-1.5">
+                Good morning, User!</h2>
+
+            <p class="text-[var(--text-muted)] text-sm font-medium">Your weather at a glance.</p>
+        </section>
+
+        <!-- ══ HERO WEATHER CARD ══════════════════════════════════════════════ -->
+        <section id="main-weather-card"
+            class="glass-card rounded-3xl p-6 sm:p-8 relative overflow-hidden animate-in delay-2 shrink-0">
+
+            <!-- Decorative glows -->
+            <div
+                class="absolute -top-24 -right-24 w-80 h-80 bg-[var(--accent-glow)] rounded-full blur-3xl opacity-55 pointer-events-none">
+            </div>
+            <div
+                class="absolute -bottom-20 -left-20 w-60 h-60 bg-[var(--accent-glow)] rounded-full blur-3xl opacity-22 pointer-events-none">
+            </div>
+            <!-- Top highlight line -->
+            <div
+                class="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-[var(--border-strong)] to-transparent pointer-events-none">
+            </div>
+
+            <div class="relative grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-10 items-center">
+
+                <!-- ── Left: icon + primary data ───────────────── -->
+                <div class="md:col-span-7 flex flex-col sm:flex-row items-center gap-5 sm:gap-8 text-center sm:text-left w-full">
+
+                    <!-- Weather icon — JS replaces innerHTML with <img> -->
+                    <div id="weather-icon"
+                        class="w-24 h-24 sm:w-28 sm:h-28 shrink-0 relative flex items-center justify-center">
+                        <!-- Skeleton circle — replaced by JS -->
+                        <div class="skeleton skeleton-circle absolute inset-0 w-full h-full"></div>
+                    </div>
+
+                    <div class="min-w-0 flex-1 flex flex-col items-center sm:items-start w-full">
+
+                        <!-- Temp + heart -->
+                        <div class="flex items-center gap-3 mb-2">
+                            <h2 id="temp"
+                                class="text-5xl sm:text-6xl md:text-7xl font-black tracking-tighter text-[var(--text-primary)] leading-none min-w-[120px]">
+                                <div class="skeleton h-12 w-28 rounded-xl my-1"></div>
+                            </h2>
+                            <button id="heart-icon"
+                                class="w-9 h-9 rounded-full flex items-center justify-center bg-[var(--bg-stat)] hover:bg-red-500/10 border border-[var(--border)] hover:border-red-400/40 text-[var(--text-muted)] hover:text-red-500 transition-all duration-200 shrink-0 cursor-pointer">
+                                <i class="fa-regular fa-heart text-base"></i>
+                            </button>
+                        </div>
+
+                        <!-- Condition -->
+                        <div id="condition" class="text-xl sm:text-2xl font-bold text-[var(--accent)] mb-1">
+                            <div class="skeleton h-6 w-36 rounded-md my-1.5"></div>
+                        </div>
+
+                        <!-- Feels like -->
+                        <div id="feelslike" class="text-sm text-[var(--text-muted)] font-medium mb-4">
+                            <div class="skeleton h-4 w-24 rounded-md my-1"></div>
+                        </div>
+
+                        <div
+                            class="h-px bg-gradient-to-r from-transparent via-[var(--border-strong)] to-transparent w-24 !mt-0 !mb-3.5 mx-auto sm:mx-0">
+                        </div>
+
+                        <!-- Location — JS sets innerText which wipes children,
+                             so the pin icon is a sibling div, NOT inside #location -->
+                        <div class="flex items-center gap-2 justify-center sm:justify-start truncate w-full">
+                            <i class="fa-solid fa-location-dot text-[var(--accent)] shrink-0 text-sm"></i>
+                            <span id="location"
+                                class="text-sm sm:text-[0.93rem] text-[var(--text-secondary)] font-semibold truncate flex-1 min-w-[140px]">
+                                <div class="skeleton h-4 w-40 rounded-md"></div>
+                            </span>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- ── Right: detail stats ──────────────────────── -->
+                <div class="md:col-span-5 md:border-l md:border-[var(--border-strong)] md:pl-8">
+                    <p
+                        class="inline-flex items-center gap-2 text-[0.67rem] font-bold tracking-[0.13em] uppercase text-[var(--accent)] bg-[rgba(2,132,199,0.10)] dark:bg-[var(--section-label)] border border-[rgba(2,132,199,0.28)] dark:border-[var(--border-strong)] px-3 py-1 rounded-full mb-2 shrink-0 select-none">
+                        <i class="fa-solid fa-sliders text-[9px]"></i>Details</p>
+                    <div class="grid grid-cols-2 gap-2.5">
+
+                        <div
+                            class="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-[1.15rem] bg-[rgba(2,132,199,0.06)] hover:bg-[rgba(2,132,199,0.12)] border border-[rgba(2,132,199,0.16)] hover:border-[var(--accent)] shadow-[0_1px_6px_rgba(2,132,199,0.08)] hover:shadow-[var(--shadow-glow)] dark:bg-[var(--bg-stat)] dark:hover:bg-[var(--bg-hover)] dark:border-[var(--border)] dark:shadow-none transition-all duration-200 hover:-translate-y-0.5 animate-pulse">
+                            <div
+                                class="w-[1.9rem] h-[1.9rem] sm:w-[2.2rem] sm:h-[2.2rem] rounded-[0.7rem] bg-[var(--accent-glow)] flex items-center justify-center text-[var(--accent)] text-[0.74rem] sm:text-[0.8rem] flex-shrink-0">
+                                <i class="fa-solid fa-droplet"></i></div>
+                            <div class="flex-1 min-w-0">
+                                <p
+                                    class="text-[0.58rem] font-bold uppercase tracking-wider text-[var(--text-muted)] leading-tight">
+                                    Humidity</p>
+                                <span id="humidity"
+                                    class="text-[0.85rem] sm:text-[0.92rem] font-extrabold text-[var(--text-primary)] mt-0.5 block">
+                                    <div class="skeleton h-4 w-8 rounded-sm mt-1"></div>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div
+                            class="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-[1.15rem] bg-[rgba(2,132,199,0.06)] hover:bg-[rgba(2,132,199,0.12)] border border-[rgba(2,132,199,0.16)] hover:border-[var(--accent)] shadow-[0_1px_6px_rgba(2,132,199,0.08)] hover:shadow-[var(--shadow-glow)] dark:bg-[var(--bg-stat)] dark:hover:bg-[var(--bg-hover)] dark:border-[var(--border)] dark:shadow-none transition-all duration-200 hover:-translate-y-0.5 animate-pulse">
+                            <div
+                                class="w-[1.9rem] h-[1.9rem] sm:w-[2.2rem] sm:h-[2.2rem] rounded-[0.7rem] bg-[var(--accent-glow)] flex items-center justify-center text-[var(--accent)] text-[0.74rem] sm:text-[0.8rem] flex-shrink-0">
+                                <i class="fa-solid fa-wind"></i></div>
+                            <div class="flex-1 min-w-0">
+                                <p
+                                    class="text-[0.58rem] font-bold uppercase tracking-wider text-[var(--text-muted)] leading-tight">
+                                    Wind</p>
+                                <span id="wind"
+                                    class="text-[0.85rem] sm:text-[0.92rem] font-extrabold text-[var(--text-primary)] mt-0.5 block">
+                                    <div class="skeleton h-4 w-12 rounded-sm mt-1"></div>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div
+                            class="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-[1.15rem] bg-[rgba(2,132,199,0.06)] hover:bg-[rgba(2,132,199,0.12)] border border-[rgba(2,132,199,0.16)] hover:border-[var(--accent)] shadow-[0_1px_6px_rgba(2,132,199,0.08)] hover:shadow-[var(--shadow-glow)] dark:bg-[var(--bg-stat)] dark:hover:bg-[var(--bg-hover)] dark:border-[var(--border)] dark:shadow-none transition-all duration-200 hover:-translate-y-0.5 animate-pulse">
+                            <div
+                                class="w-[1.9rem] h-[1.9rem] sm:w-[2.2rem] sm:h-[2.2rem] rounded-[0.7rem] bg-[var(--accent-glow)] flex items-center justify-center text-[var(--accent)] text-[0.74rem] sm:text-[0.8rem] flex-shrink-0">
+                                <i class="fa-solid fa-sun"></i></div>
+                            <div class="flex-1 min-w-0">
+                                <p
+                                    class="text-[0.58rem] font-bold uppercase tracking-wider text-[var(--text-muted)] leading-tight">
+                                    Sunrise</p>
+                                <span id="sunrise"
+                                    class="text-[0.85rem] sm:text-[0.92rem] font-extrabold text-[var(--text-primary)] mt-0.5 block">
+                                    <div class="skeleton h-4 w-14 rounded-sm mt-1"></div>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div
+                            class="flex items-center gap-2.5 sm:gap-3 p-3 sm:p-3.5 rounded-[1.15rem] bg-[rgba(2,132,199,0.06)] hover:bg-[rgba(2,132,199,0.12)] border border-[rgba(2,132,199,0.16)] hover:border-[var(--accent)] shadow-[0_1px_6px_rgba(2,132,199,0.08)] hover:shadow-[var(--shadow-glow)] dark:bg-[var(--bg-stat)] dark:hover:bg-[var(--bg-hover)] dark:border-[var(--border)] dark:shadow-none transition-all duration-200 hover:-translate-y-0.5 animate-pulse">
+                            <div
+                                class="w-[1.9rem] h-[1.9rem] sm:w-[2.2rem] sm:h-[2.2rem] rounded-[0.7rem] bg-[var(--accent-glow)] flex items-center justify-center text-[var(--accent)] text-[0.74rem] sm:text-[0.8rem] flex-shrink-0">
+                                <i class="fa-solid fa-moon"></i></div>
+                            <div class="flex-1 min-w-0">
+                                <p
+                                    class="text-[0.58rem] font-bold uppercase tracking-wider text-[var(--text-muted)] leading-tight">
+                                    Sunset</p>
+                                <span id="sunset"
+                                    class="text-[0.85rem] sm:text-[0.92rem] font-extrabold text-[var(--text-primary)] mt-0.5 block">
+                                    <div class="skeleton h-4 w-14 rounded-sm mt-1"></div>
+                                </span>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ══ BOTTOM DASHBOARD GRID ═════════════════════════════════════════ -->
+        <section id="bottom-grid" class="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in delay-3">
+
+            <!-- ── Hourly chart ──────────────────────────────────────── -->
+            <div id="hourly-chart-container" class="lg:col-span-8 glass-card rounded-3xl p-5 sm:p-6 flex flex-col min-w-0">
+
+                <!-- Chart header -->
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <p
+                            class="inline-flex items-center gap-2 text-[0.67rem] font-bold tracking-[0.13em] uppercase text-[var(--accent)] bg-[rgba(2,132,199,0.10)] dark:bg-[var(--section-label)] border border-[rgba(2,132,199,0.28)] dark:border-[var(--border-strong)] px-3 py-1 rounded-full mb-2 shrink-0 select-none">
+                            <i class="fa-solid fa-chart-area text-[9px]"></i>Hourly Forecast</p>
+                        <h4 class="font-bold text-[0.95rem] text-[var(--text-primary)]">Temperature Today</h4>
+                    </div>
+                    <span
+                        class="text-xs font-bold text-[var(--accent)] bg-[rgba(2,132,199,0.10)] dark:bg-[var(--section-label)] border border-[rgba(2,132,199,0.28)] dark:border-[var(--border-strong)] px-3 py-1.5 rounded-full">°C</span>
+                </div>
+
+                <div class="h-px bg-gradient-to-r from-transparent via-[var(--border-strong)] to-transparent mb-5">
+                </div>
+
+                <!-- Canvas wrapper — skeleton sits behind canvas in z-stack.
+                     Canvas gets an opaque CSS background so it visually covers
+                     the shimmer once Chart.js draws. -->
+                <div class="relative w-full flex-1 min-h-[260px] overflow-hidden">
+                    <div class="skeleton absolute inset-0 rounded-xl z-0 pointer-events-none"></div>
+                    <canvas id="hourly-chart" class="absolute inset-0 w-full h-full z-10"></canvas>
+                </div>
+
+            </div>
+
+            <!-- ── Right column ──────────────────────────────────────── -->
+            <div class="lg:col-span-4 flex flex-col md:flex-row lg:flex-col gap-5 min-w-0">
+
+                <!-- 5-Day Forecast
+                     IMPORTANT: The outer glass wrapper is NOT the JS target.
+                     #forecast-container is the inner scroll div so the permanent
+                     header/label survives JS's innerHTML wipe. -->
+                <div
+                    class="glass-card rounded-3xl p-5 sm:p-6 flex flex-col animate-in delay-4 bg-gradient-to-br from-white/90 to-[rgba(214,238,252,0.82)] dark:bg-none flex-1 w-full">
+                    <p
+                        class="inline-flex items-center gap-2 text-[0.67rem] font-bold tracking-[0.13em] uppercase text-[var(--accent)] bg-[rgba(2,132,199,0.10)] dark:bg-[var(--section-label)] border border-[rgba(2,132,199,0.28)] dark:border-[var(--border-strong)] px-3 py-1 rounded-full mb-2 shrink-0 select-none">
+                        <i class="fa-solid fa-calendar-days text-[9px]"></i>5-Day Forecast</p>
+                    <h4 class="font-bold text-[0.95rem] text-[var(--text-primary)] mb-3">Upcoming</h4>
+                    <div class="h-px bg-gradient-to-r from-transparent via-[var(--border-strong)] to-transparent mb-3">
+                    </div>
+
+                    <!-- JS targets this: innerHTML cleared → h4 + 5 day-cards appended -->
+                    <div id="forecast-container" class="overflow-y-auto custom-scrollbar flex flex-col gap-2 pr-2"
+                        style="max-height: 316px;">
+                        <!-- Pre-load skeleton forecast rows (5 rows = 5-day data) -->
+                        <div class="fc-skeleton-row">
+                            <div class="skeleton skeleton-circle w-9 h-9 shrink-0"></div>
+                            <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                                <div class="skeleton h-3.5 w-16 rounded-md"></div>
+                                <div class="skeleton h-3 w-20 rounded-md"></div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <div class="skeleton h-3.5 w-7 rounded-md"></div>
+                                <div class="skeleton h-3 w-5 rounded-md"></div>
+                            </div>
+                        </div>
+                        <div class="fc-skeleton-row">
+                            <div class="skeleton skeleton-circle w-9 h-9 shrink-0"></div>
+                            <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                                <div class="skeleton h-3.5 w-20 rounded-md"></div>
+                                <div class="skeleton h-3 w-24 rounded-md"></div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <div class="skeleton h-3.5 w-7 rounded-md"></div>
+                                <div class="skeleton h-3 w-5 rounded-md"></div>
+                            </div>
+                        </div>
+                        <div class="fc-skeleton-row">
+                            <div class="skeleton skeleton-circle w-9 h-9 shrink-0"></div>
+                            <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                                <div class="skeleton h-3.5 w-14 rounded-md"></div>
+                                <div class="skeleton h-3 w-16 rounded-md"></div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <div class="skeleton h-3.5 w-7 rounded-md"></div>
+                                <div class="skeleton h-3 w-5 rounded-md"></div>
+                            </div>
+                        </div>
+                        <div class="fc-skeleton-row">
+                            <div class="skeleton skeleton-circle w-9 h-9 shrink-0"></div>
+                            <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                                <div class="skeleton h-3.5 w-18 rounded-md"></div>
+                                <div class="skeleton h-3 w-20 rounded-md"></div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <div class="skeleton h-3.5 w-7 rounded-md"></div>
+                                <div class="skeleton h-3 w-5 rounded-md"></div>
+                            </div>
+                        </div>
+                        <div class="fc-skeleton-row">
+                            <div class="skeleton skeleton-circle w-9 h-9 shrink-0"></div>
+                            <div class="flex flex-col gap-1.5 flex-1 min-w-0">
+                                <div class="skeleton h-3.5 w-16 rounded-md"></div>
+                                <div class="skeleton h-3 w-18 rounded-md"></div>
+                            </div>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <div class="skeleton h-3.5 w-7 rounded-md"></div>
+                                <div class="skeleton h-3 w-5 rounded-md"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Saved Cities / Favorites -->
+                <div id="favorites-container"
+                    class="glass-card rounded-3xl p-5 sm:p-6 flex flex-col animate-in delay-5 bg-gradient-to-br from-white/90 to-[rgba(214,238,252,0.82)] dark:bg-none flex-1 w-full">
+                    <div class="flex items-center justify-between mb-1">
+                        <div>
+                            <p
+                                class="inline-flex items-center gap-2 text-[0.67rem] font-bold tracking-[0.13em] uppercase text-[var(--accent)] bg-[rgba(2,132,199,0.10)] dark:bg-[var(--section-label)] border border-[rgba(2,132,199,0.28)] dark:border-[var(--border-strong)] px-3 py-1 rounded-full mb-2 shrink-0 select-none">
+                                <i class="fa-solid fa-heart text-[9px]"></i>Favorites</p>
+                            <h4 class="font-bold text-[0.95rem] text-[var(--text-primary)]">Saved Cities</h4>
+                        </div>
+                        <button id="add-fav"
+                            class="flex items-center gap-1.5 bg-[var(--accent)] hover:opacity-90 text-white px-4 py-2 rounded-full text-xs font-bold transition-all shadow-md shadow-[var(--accent-glow)] hover:scale-105 active:scale-95 shrink-0 cursor-pointer">
+                            <i class="fa-solid fa-plus text-[0.65rem]"></i>
+                            <span>Add City</span>
+                        </button>
+                    </div>
+
+                    <div
+                        class="h-px bg-gradient-to-r from-transparent via-[var(--border-strong)] to-transparent mt-3 mb-4">
+                    </div>
+
+                    <!-- JS clears and re-renders chips here -->
+                    <div id="favorites-list"
+                        class="custom-scrollbar max-h-40 overflow-y-auto flex flex-wrap gap-2 min-h-[2.5rem]">
+                        <!-- Pre-load skeleton chips -->
+                        <div class="skeleton skeleton-pill h-8 w-24"></div>
+                        <div class="skeleton skeleton-pill h-8 w-20"></div>
+                        <div class="skeleton skeleton-pill h-8 w-28"></div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none"></div>
+
+
+        <script src="config.js"></script>
+
+    <script src="main.js"></script>
+</body>
+
+</html>
