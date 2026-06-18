@@ -331,7 +331,7 @@ async function testconnection(city) {
         }
 
             try {
-                const response = await fetch(`http://api.weatherapi.com/v1/forecast.json?key=${API_KEY}&q=${city}&days=5&aqi=yes&alerts=no` );
+                const response = await fetch(`https://api.weatherapi.com/v1/forecast.json?key=${API_KEY}&q=${city}&days=5&aqi=yes&alerts=no` );
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
             // Error handling toast should be here
